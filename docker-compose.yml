@@ -1,0 +1,22 @@
+name: icinf1108-templates2026
+
+services:
+  api:
+    build:
+      context: .
+      target: dev
+    image: icinf1108-templates2026:dev
+    container_name: icinf1108-api-dev
+    init: true
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    environment:
+      NODE_ENV: development
+      TSC_WATCHFILE: UsePollingWatchFile
+      TSC_WATCHDIRECTORY: UsePollingWatchDirectory
+    volumes:
+      # Bind-mount the source for hot reload...
+      - .:/app
+      # ...but keep the image's node_modules
+      - /app/node_modules
+    restart: unless-stopped
