@@ -49,7 +49,8 @@ ps:
 # Migraciones TypeORM (se ejecutan DENTRO del contenedor de la API, que ve a la BD como host "db").
 # En dev el codigo compilado (dist/) lo genera `nest start --watch`; esperamos a que exista.
 migrate:
-	@until $(COMPOSE) exec -T api test -f dist/database/data-source.js; do echo "Esperando compilacion de la API..."; sleep 2; done
+	@$(COMPOSE) ps -q api | grep -q . || { echo "La API no esta corriendo. Ejecuta 'make dev' primero."; exit 1; }
+	@for i in $$(seq 1 60); do $(COMPOSE) exec -T api test -f dist/database/data-source.js && break; echo "Esperando compilacion de la API ($$i/60)..."; sleep 2; done
 	$(COMPOSE) exec -T api pnpm run migration:run
 
 migrate-prod:
