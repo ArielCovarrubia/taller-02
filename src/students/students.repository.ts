@@ -1,34 +1,46 @@
 import { Injectable } from "@nestjs/common"
+import { InjectRepository } from "@nestjs/typeorm"
+import { isUUID } from "class-validator"
+import { DeepPartial, EntityManager, Repository } from "typeorm"
 
 import { Student } from "./students.entity"
-import { InMemoryStore } from "@/shared/in-memory-store"
 
 @Injectable()
 export class StudentsRepository {
-	private readonly store = new InMemoryStore<Student>()
+	constructor(
+		@InjectRepository(Student)
+		private readonly repository: Repository<Student>,
+	) {}
 
-	public findAll(): Student[] {
-		return this.store.findAll()
+	// Si se entrega un `manager`, la operación participa en esa transacción.
+	private repo(manager?: EntityManager): Repository<Student> {
+		return manager ? manager.getRepository(Student) : this.repository
 	}
 
-	public findById(id: string): Student | undefined {
-		return this.store.get(id)
+	public findAll(manager?: EntityManager): Promise<Student[]> {
+		return this.repo(manager).find({ order: { createdAt: "DESC" } })
 	}
 
-	public findByEmail(email: string): Student | undefined {
-		return this.store.findBy((student) => student.email === email)[0]
+	public async findById(id: string, manager?: EntityManager): Promise<Student | null> {
+		// Un id con formato inválido haría fallar a Postgres (500); lo tratamos como "no existe".
+		if (!isUUID(id)) return null
+		return this.repo(manager).findOneBy({ id })
 	}
 
-	public findByUsername(username: string): Student | undefined {
-		return this.store.findBy((student) => student.username === username)[0]
+	public findByEmail(email: string, manager?: EntityManager): Promise<Student | null> {
+		return this.repo(manager).findOneBy({ email })
 	}
 
-	public save(student: Student): Student {
-		this.store.set(student)
-		return student
+	public findByUsername(username: string, manager?: EntityManager): Promise<Student | null> {
+		return this.repo(manager).findOneBy({ username })
 	}
 
-	public delete(id: string): void {
-		this.store.delete(id)
+	public save(student: DeepPartial<Student>, manager?: EntityManager): Promise<Student> {
+		const repo = this.repo(manager)
+		return repo.save(repo.create(student))
+	}
+
+	public async delete(id: string, manager?: EntityManager): Promise<void> {
+		await this.repo(manager).delete({ id })
 	}
 }

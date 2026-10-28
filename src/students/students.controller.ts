@@ -1,15 +1,11 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post } from "@nestjs/common"
 
-import { PetsService } from "@/pets/pets.service"
 import { StudentsService } from "@/students/students.service"
 import { CreateStudentDto, UpdateStudentDto } from "@/students/students.dtos"
 
 @Controller("api/students")
 export class StudentsController {
-	constructor(
-		private readonly studentsService: StudentsService,
-		private readonly petsService: PetsService,
-	) {}
+	constructor(private readonly studentsService: StudentsService) {}
 
 	@Get()
 	public async findAll() {
@@ -37,9 +33,7 @@ export class StudentsController {
 
 	@Delete(":id")
 	public delete(@Param("id") id: string) {
-		const deleted = this.studentsService.delete(id)
-		this.petsService.deleteAllForStudent(id)
-
-		return deleted
+		// El servicio elimina mascotas + estudiante en una sola transacción.
+		return this.studentsService.delete(id)
 	}
 }

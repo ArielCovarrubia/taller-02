@@ -13,7 +13,13 @@
         "start:dev": "nest start --watch --no-shell",
         "start:debug": "nest start --debug --watch --no-shell",
         "start:prod": "node dist/main",
-        "lint": "NODE_OPTIONS='--disable-warning=MODULE_TYPELESS_PACKAGE_JSON' eslint \"{src,apps,libs}/**/*.ts\" --fix"
+        "lint": "NODE_OPTIONS='--disable-warning=MODULE_TYPELESS_PACKAGE_JSON' eslint \"{src,apps,libs}/**/*.ts\" --fix",
+        "typeorm": "node -r ts-node/register -r tsconfig-paths/register ./node_modules/typeorm/cli.js",
+        "migration:generate": "pnpm run typeorm migration:generate -d src/database/data-source.ts",
+        "migration:run": "typeorm migration:run -d dist/database/data-source.js",
+        "migration:revert": "typeorm migration:revert -d dist/database/data-source.js",
+        "migration:show": "typeorm migration:show -d dist/database/data-source.js",
+        "verify:rollback": "node dist/scripts/verify-rollback.js"
     },
     "dependencies": {
         "@nestjs/common": "^11.0.1",

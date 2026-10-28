@@ -30,7 +30,7 @@ async function bootstrap() {
 
 	const config = new DocumentBuilder()
 		.setTitle("NestJS CRUD Students & Pets")
-		.setDescription("API de un CRUD en memoria para la entidad Student y sus mascotas (Pet)")
+		.setDescription("API CRUD sobre PostgreSQL para la entidad Student y sus mascotas (Pet)")
 		.setVersion("1.0")
 		.build()
 
