@@ -35,8 +35,9 @@ services:
     networks:
       - app-network
 
-  # 3. API de NestJS
+  # 3a. API de NestJS - modo DESARROLLO (perfil "dev": hot reload + código montado)
   api:
+    profiles: ["dev"]
     build:
       context: .
       target: dev
@@ -54,6 +55,27 @@ services:
     volumes:
       - .:/app
       - /app/node_modules
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - app-network
+
+  # 3b. API de NestJS - modo PRODUCCIÓN (perfil "prod": imagen ligera, sin código montado)
+  api-prod:
+    profiles: ["prod"]
+    build:
+      context: .
+      target: prod
+    image: icinf1108-api:prod
+    container_name: taller02-api-prod
+    init: true
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL}
     depends_on:
       db:
         condition: service_healthy

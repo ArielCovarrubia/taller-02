@@ -1,10 +1,12 @@
 # CRUD Students & Pets
 
-Proyecto NestJS que implementa un **CRUD** para la entidad `Student` y sus `Pet`, con **almacenamiento en memoria** a través de repositorios respaldados por diccionarios (`Map`). Los datos viven mientras el proceso esté corriendo.
+Proyecto NestJS que implementa un **CRUD** para la entidad `Student` y sus `Pet`, con persistencia en **PostgreSQL** mediante **TypeORM**, migraciones versionadas y transacciones con rollback. Los datos se guardan en un volumen de Docker y sobreviven a reinicios.
 
 ## Tecnologías
 
-- Node.js LTS
+- Node.js LTS + NestJS
+- PostgreSQL 16 + TypeORM (migraciones versionadas)
+- Docker + Docker Compose (API, PostgreSQL y Adminer)
 - HTML + JS + Tailwind CSS
 
 ## Resumen funcional
@@ -45,7 +47,7 @@ La API expone operaciones CRUD completas sobre estudiantes y mascotas:
 
 Si no se envía `pets` (o se envía vacío), el comportamiento es exactamente el mismo de antes.
 
-> **Punto de transacción:** este endpoint realiza varias escrituras (el estudiante y cada mascota). Con un ORM/SQL, todas deben ejecutarse dentro de una transacción: si una mascota falla (por ejemplo, por nombre duplicado), el estudiante y las mascotas anteriores no deben quedar guardados. En esta versión en memoria la implementación es secuencial y **no** hace rollback, a propósito, para que la actividad de ORM/transacciones parta de ese problema.
+> **Transacción:** `POST /api/students` (estudiante + mascotas) y `DELETE /api/students/:id` (mascotas + estudiante) se ejecutan en una transacción atómica. Si cualquier paso falla se hace **ROLLBACK** y no queda nada guardado ni huérfano. Ver [Transacciones y rollback](#transacciones-y-rollback).
 
 ### Modelo de datos
 
@@ -178,7 +180,93 @@ El cliente estático (`public/`) consume este estándar de forma uniforme:
 - `public/js/api.js` expone `api()` (hace `fetch` y devuelve `data` en éxito o lanza el envelope en error) y `normalizeErrors()` (convierte `{ campo: { message } }` en `{ campo: message }`).
 - En los formularios, si la respuesta trae `errors`, cada mensaje se muestra bajo su input correspondiente; si trae `error`, se muestra como notificación global (toast).
 
-## Ejecución local
+## Ejecución con Docker (recomendado)
+
+Requisitos: Docker con Docker Compose y `make`.
+
+```bash
+git clone https://github.com/ArielCovarrubia/taller-02.git
+cd taller-02
+make dev        # crea .env si no existe y levanta db + adminer + api
+make migrate    # crea las tablas (aplica las migraciones)
+```
+
+Con eso quedan activos 3 contenedores:
+
+| Servicio   | Descripción                    | URL                                |
+| ---------- | ------------------------------ | ---------------------------------- |
+| `api`      | API NestJS (hot reload)        | http://localhost:3000 (docs: /docs) |
+| `db`       | PostgreSQL 16                  | `localhost:5432`                   |
+| `db-admin` | Adminer (administrador visual) | http://localhost:8080              |
+
+### Credenciales y Admin Visual (Adminer)
+
+Entrar a http://localhost:8080 y completar:
+
+| Campo     | Valor                                                  |
+| --------- | ------------------------------------------------------ |
+| Sistema   | PostgreSQL                                             |
+| Servidor  | `db`                                                   |
+| Usuario   | `postgres` (valor de `POSTGRES_USER` en `.env`)        |
+| Contraseña| `postgres` (valor de `POSTGRES_PASSWORD` en `.env`)    |
+| Base      | `taller02_db` (valor de `POSTGRES_DB` en `.env`)       |
+
+Ahí se ven las tablas `students`, `pets` y `migrations`.
+
+### Comandos (Makefile)
+
+| Comando                | Qué hace                                                              |
+| ---------------------- | --------------------------------------------------------------------- |
+| `make dev`             | Levanta todo en modo desarrollo (`docker compose --profile dev`)      |
+| `make prod`            | Levanta todo en modo producción (imagen ligera, usuario `node`)       |
+| `make down`            | Detiene los contenedores **conservando los datos** (volumen)          |
+| `make clean`           | Detiene y **borra los volúmenes** (`docker compose down -v`)          |
+| `make migrate`         | Aplica las migraciones pendientes (en producción: `make migrate-prod`) |
+| `make migrate-show`    | Muestra qué migraciones están aplicadas                               |
+| `make migrate-revert`  | Revierte la última migración                                          |
+| `make verify-rollback` | Demuestra el rollback de transacciones                                |
+| `make logs`            | Muestra los logs de los contenedores                                  |
+
+### Migraciones
+
+El esquema **no** se crea con `synchronize`; se versiona con migraciones de TypeORM en [`src/database/migrations/`](src/database/migrations). La primera crea las tablas `students` y `pets`.
+
+Cuando se modifiquen las entidades, generar una nueva migración (dentro del contenedor de desarrollo) y aplicarla:
+
+```bash
+docker compose exec api pnpm run migration:generate src/database/migrations/NombreDelCambio
+make migrate
+```
+
+### Persistencia
+
+1. `make dev` y `make migrate`.
+2. Crear un estudiante (Swagger en http://localhost:3000/docs o Adminer).
+3. `make down` y luego `make dev` otra vez: el estudiante sigue ahí, porque los datos viven en el volumen `postgres_data`.
+4. `make clean` borra el volumen y, con él, los datos.
+
+### Transacciones y rollback
+
+Las operaciones que modifican más de una tabla usan `runInTransaction` ([`src/shared/transaction.ts`](src/shared/transaction.ts)), que hace `COMMIT` si todo sale bien y `ROLLBACK` si algo falla:
+
+- `DELETE /api/students/:id`: borra las mascotas y luego al estudiante.
+- `POST /api/students` con `pets[]`: crea al estudiante y sus mascotas.
+
+Para verificarlo (fuerza errores sobre el código real de la API):
+
+```bash
+make verify-rollback
+```
+
+Salida esperada:
+
+- Caso 1: el borrado del estudiante falla a mitad de la transacción → aparece `ROLLBACK ejecutado` y el estudiante y sus 2 mascotas siguen intactos.
+- Caso 2: se crea un estudiante con dos mascotas del mismo nombre → `409 Conflict` y el estudiante **no** queda guardado.
+- Termina con `TODAS LAS VERIFICACIONES PASARON`.
+
+## Ejecución local (sin Docker)
+
+Requiere una PostgreSQL accesible y `DATABASE_URL` definida (ver `.env.example`; con host `localhost` en vez de `db`).
 
 1. Instalar dependencias:
 
@@ -196,7 +284,7 @@ El cliente estático (`public/`) consume este estándar de forma uniforme:
 
     ```bash
     make install
-    make dev
+    make dev-local
     ```
 
 La aplicación queda disponible en:
@@ -204,13 +292,11 @@ La aplicación queda disponible en:
 - `http://localhost:3000`
 - `http://localhost:3000/docs`
 
-> Al ser un almacenamiento en memoria, los datos se pierden cada vez que se reinicia el servidor (incluido el reload de desarrollo).
+## Comandos útiles (locales, sin Docker)
 
-## Comandos útiles
-
-- `make dev` — arranca NestJS en modo watch
+- `make dev-local` — arranca NestJS en modo watch
 - `make build` — compila el proyecto
 - `make lint` — ejecuta ESLint
 - `make format` — formatea el código
 - `make format-check` — verifica el formato
-- `make clean` — elimina `dist`, `coverage` y `node_modules`
+- `make clean-local` — elimina `dist`, `coverage` y `node_modules`
